@@ -1,5 +1,5 @@
 export mwcs, mwcs_dvv
-
+using Plots, Random, Statistics
 function getCoherence(dcs,ds1,ds2)
   coh = zeros(size(dcs))
   valids = intersect(findall(x -> abs.(x) > 0,ds1),findall(x -> abs.(x) > 0,ds2))
@@ -120,9 +120,9 @@ function mwcs(ref::AbstractArray,cur::AbstractArray,fmin::Float64,
     X = fref .* conj.(fcur)
 
     if smoothing_half_win != 0
-        dcur = sqrt.(SeisNoise.smooth(fcur2,half_win=smoothing_half_win))
-        dref = sqrt.(SeisNoise.smooth(fref2,half_win=smoothing_half_win))
-        X = SeisNoise.smooth(X, half_win=smoothing_half_win)
+        dcur = sqrt.(SeisNoise.smooth(fcur2, smoothing_half_win))
+        dref = sqrt.(SeisNoise.smooth(fref2, smoothing_half_win))
+        X = SeisNoise.smooth(X, smoothing_half_win)
     else
         dcur = sqrt.(fcur2)
         dref = sqrt.(fref2)
@@ -151,7 +151,30 @@ function mwcs(ref::AbstractArray,cur::AbstractArray,fmin::Float64,
 
     # Calculate the slope with a weighted least square linear regression
     # forced through the origin
+
+    # plot(ref, dpi=150)
+    # plot!(cur)
+    # figdir = "/Users/kokubo/Documents/research/dev_MWCS/dev_MWCS_INPUT/fig/"
+    # savefig(figdir*"debug_refcur"*randstring(12)*".png")
+
+    mediumamp = Statistics.mean(abs.(ref))
+
     for ii = 1:N
+        # NOTE: Advanced threshold to ignore low S/N time window
+        # Ignore zero padding area
+        if Statistics.mean(abs.(phi[:,ii])) < 0.1*mediumamp
+            # skip this window due to low S/N
+            dt[ii] = Inf
+            err[ii] = Inf
+            continue
+        end
+
+        # DEBUG
+        # println("debug $(ii)")
+        # plot(v, phi[:,ii], title = "$(ii)", markershape=:auto, dpi=150)
+        # figdir = "/Users/kokubo/Documents/research/dev_MWCS/dev_MWCS_INPUT/fig/"
+        # savefig(figdir*"debug_glm_$(ii)"*randstring(12)*".png")
+
         model = glm(@formula(Y ~0 + X),DataFrame(X=v,Y=phi[:,ii]),Normal(),
                     IdentityLink(),wts=w[:,ii])
         # a much faster, unweighted version of this is: m = v \ phi
@@ -241,7 +264,7 @@ function mwcs_dvv(time_axis::AbstractArray, dt::AbstractArray,
     dt, err, coh = dt[tindex], err[tindex], coh[tindex]
     index = intersect(findall(x -> x .<= min_coh,coh),
                       findall(x -> x .>= max_err,err),
-                      findall(x -> abs.(x) .>= max_dt,time_axis))
+                      findall(x -> abs.(x) .>= max_dt, dt))
     dt[index] .= 0.
     err[index] .= 1.
     coh[index] .= 1.
