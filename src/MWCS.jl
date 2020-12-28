@@ -1,5 +1,6 @@
 export mwcs, mwcs_dvv
-using Plots, Random, Statistics
+# using Plots, Random, Statistics
+using Statistics
 function getCoherence(dcs,ds1,ds2)
   coh = zeros(size(dcs))
   valids = intersect(findall(x -> abs.(x) > 0,ds1),findall(x -> abs.(x) > 0,ds2))
