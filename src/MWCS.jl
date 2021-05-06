@@ -162,11 +162,13 @@ function mwcs(ref::AbstractArray,cur::AbstractArray,fmin::Float64,
 
     for ii = 1:N
         # NOTE: Advanced threshold to ignore low S/N time window
-        # Ignore zero padding area
-        if Statistics.mean(abs.(phi[:,ii])) < 0.1*mediumamp
+        # Ignore zero padding area if amplitude of short-time windowed reference
+        # is less than 1% of average amplitude of entire reference
+        # println("mean abs cri:$(mean(abs.(cri[:,ii]))), mediumamp:$(mediumamp)")
+        if Statistics.mean(abs.(cri[:,ii])) < 0.01*mediumamp
             # skip this window due to low S/N
-            dt[ii] = Inf
-            err[ii] = Inf
+            dt[ii] = 0.0
+            err[ii] = 1.0
             continue
         end
 
@@ -175,6 +177,10 @@ function mwcs(ref::AbstractArray,cur::AbstractArray,fmin::Float64,
         # plot(v, phi[:,ii], title = "$(ii)", markershape=:auto, dpi=150)
         # figdir = "/Users/kokubo/Documents/research/dev_MWCS/dev_MWCS_INPUT/fig/"
         # savefig(figdir*"debug_glm_$(ii)"*randstring(12)*".png")
+        #
+        # plot(cri[:,ii], title = "$(ii) mean abs cri:$(mean(abs.(cri[:,ii])))", markershape=:auto, dpi=150, label="cri", legend=true)
+        # plot!(cci[:,ii], markershape=:auto, label="cci")
+        # savefig(figdir*"debug_ccri_$(ii)"*randstring(12)*".png")
 
         model = glm(@formula(Y ~0 + X),DataFrame(X=v,Y=phi[:,ii]),Normal(),
                     IdentityLink(),wts=w[:,ii])
@@ -262,12 +268,14 @@ function mwcs_dvv(time_axis::AbstractArray, dt::AbstractArray,
     end
 
     # index to subset data
+    # println(time_axis)
+
     dt, err, coh = dt[tindex], err[tindex], coh[tindex]
     index = intersect(findall(x -> x .<= min_coh,coh),
                       findall(x -> x .>= max_err,err),
                       findall(x -> abs.(x) .>= max_dt, dt))
     dt[index] .= 0.
-    err[index] .= 1.
+    err[index] .= 1. # usually error is much smaller than 1.0, so no weight with this index is negligible
     coh[index] .= 1.
 
     # weight statistics
@@ -275,6 +283,14 @@ function mwcs_dvv(time_axis::AbstractArray, dt::AbstractArray,
 
     # regress data using least squares
     VecXfilt = time_axis[tindex]
+
+    # # debug
+    # figdir = "/Users/kokubo/Documents/research/dev_MWCS/dev_MWCS_INPUT/fig/"
+    # plot(VecXfilt, dt, markershape=:auto, label="dt")
+    # savefig(figdir*"debug_dt_"*randstring(12)*".png")
+    # plot(VecXfilt, w, markershape=:auto, label="weight")
+    # savefig(figdir*"debug_weight_"*randstring(12)*".png")
+
     model0 = glm(@formula(Y ~0 + X),DataFrame(X=VecXfilt,Y=dt),Normal(),
                 IdentityLink(),wts=w)
     model = glm(@formula(Y ~ X),DataFrame(X=VecXfilt,Y=dt),Normal(),
