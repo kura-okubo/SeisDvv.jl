@@ -152,6 +152,17 @@ function mwcs(ref::AbstractArray,cur::AbstractArray,fmin::Float64,
     # Calculate the slope with a weighted least square linear regression
     # forced through the origin
     for ii = 1:N
+
+        #Debug: the weight is all zero when the cross-spectrum is zero due to zero
+        #signal caused by e.g. taper, which causes error of 'PosDefException' in GLM.glm.
+        #Thus, ignore those windows.
+        if all(iszero.(w[:, ii]))
+            mcoh[ii] = 0.0
+            dt[ii] = 1.0 # needs to be more than max_dt
+            err[ii] = 1.0
+            continue
+        end
+
         model = glm(@formula(Y ~0 + X),DataFrame(X=v,Y=phi[:,ii]),Normal(),
                     IdentityLink(),wts=w[:,ii])
         # a much faster, unweighted version of this is: m = v \ phi
@@ -243,7 +254,7 @@ function mwcs_dvv(time_axis::AbstractArray, dt::AbstractArray,
                       findall(x -> x .>= max_err,err),
                       findall(x -> abs.(x) .>= max_dt,dt))
     dt[index] .= 0.
-    err[index] .= 1.
+    err[index] .= 1. # usually error is much smaller than 1.0, so no weight with this index is negligible
     coh[index] .= 1.
 
     # weight statistics
