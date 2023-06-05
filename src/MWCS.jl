@@ -161,26 +161,16 @@ function mwcs(ref::AbstractArray,cur::AbstractArray,fmin::Float64,
     mediumamp = Statistics.mean(abs.(ref))
 
     for ii = 1:N
-        # NOTE: Advanced threshold to ignore low S/N time window
-        # Ignore zero padding area if amplitude of short-time windowed reference
-        # is less than 1% of average amplitude of entire reference
-        # println("mean abs cri:$(mean(abs.(cri[:,ii]))), mediumamp:$(mediumamp)")
-        if Statistics.mean(abs.(cri[:,ii])) < 0.01*mediumamp
-            # skip this window due to low S/N
-            dt[ii] = 0.0
+
+        #Debug: the weight is all zero when the cross-spectrum is zero due to zero
+        #signal caused by e.g. taper, which causes error of 'PosDefException' in GLM.glm.
+        #Thus, ignore those windows.
+        if all(iszero.(w[:, ii]))
+            mcoh[ii] = 0.0
+            dt[ii] = 1.0 # needs to be more than max_dt
             err[ii] = 1.0
             continue
         end
-
-        # DEBUG
-        # println("debug $(ii)")
-        # plot(v, phi[:,ii], title = "$(ii)", markershape=:auto, dpi=150)
-        # figdir = "/Users/kokubo/Documents/research/dev_MWCS/dev_MWCS_INPUT/fig/"
-        # savefig(figdir*"debug_glm_$(ii)"*randstring(12)*".png")
-        #
-        # plot(cri[:,ii], title = "$(ii) mean abs cri:$(mean(abs.(cri[:,ii])))", markershape=:auto, dpi=150, label="cri", legend=true)
-        # plot!(cci[:,ii], markershape=:auto, label="cci")
-        # savefig(figdir*"debug_ccri_$(ii)"*randstring(12)*".png")
 
         model = glm(@formula(Y ~0 + X),DataFrame(X=v,Y=phi[:,ii]),Normal(),
                     IdentityLink(),wts=w[:,ii])
@@ -273,7 +263,7 @@ function mwcs_dvv(time_axis::AbstractArray, dt::AbstractArray,
     dt, err, coh = dt[tindex], err[tindex], coh[tindex]
     index = intersect(findall(x -> x .<= min_coh,coh),
                       findall(x -> x .>= max_err,err),
-                      findall(x -> abs.(x) .>= max_dt, dt))
+                      findall(x -> abs.(x) .>= max_dt,dt))
     dt[index] .= 0.
     err[index] .= 1. # usually error is much smaller than 1.0, so no weight with this index is negligible
     coh[index] .= 1.
